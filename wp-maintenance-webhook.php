@@ -53,11 +53,19 @@ class WebhookHandler
     protected function webhook_enable_maintenance()
     {
         $file = ABSPATH . '/.maintenance';
-        $maintenance_string = '<?php $upgrading = ' . time() . '; ?>';
+        $time = time();
+        $maintenance_string = '<?php $upgrading = ' . $time . '; ?>';
         if ( file_exists( $file ) )
             unlink( $file );
         file_put_contents( $file, $maintenance_string );
         chmod( $file, FS_CHMOD_FILE );
+        // Output
+        $this->output( [
+            'error'             => false,
+            'time'              => $time,
+            'message'           => 'Maintenance mode enabled!',
+            'maintenance'       => true,
+        ] );
     }
     /**
      * Webhook "disable_maintenance" hadler.
@@ -68,6 +76,12 @@ class WebhookHandler
         $file = ABSPATH . '/.maintenance';
         if ( file_exists( $file ) )
             unlink( $file );
+        // Output
+        $this->output( [
+            'error'             => false,
+            'message'           => 'Maintenance mode disabled!',
+            'maintenance'       => false,
+        ] );
     }
     /**
      * Listens to webhook requests.
@@ -79,6 +93,11 @@ class WebhookHandler
         $webhooks = ['enable_maintenance', 'disable_maintenance'];
         if ( ! in_array( $webhook, $webhooks ) ) {
             header( 'HTTP/1.0 401 Unauthorized' );
+            // Output
+            $this->error( [
+                'error'     => true,
+                'message'   => 'Unauthorized',
+            ] );
             exit;
         }
         $this->{'webhook_' . $webhook}();
@@ -99,6 +118,11 @@ class WebhookHandler
             || $password !== HTTP_PASSWORD
         ) {
             header( 'HTTP/1.0 401 Unauthorized' );
+            // Output
+            $this->error( [
+                'error'     => true,
+                'message'   => 'Unauthorized',
+            ] );
             exit;
         } else {
             $this->has_auth = true;
@@ -119,6 +143,87 @@ class WebhookHandler
             return preg_replace( '/[\<\?\>\.\\\[\]\{\}\'\"]/', '', strip_tags( trim( $_GET[$key] ) ) );
         }
         return $default;
+    }
+    /**
+     * Prints output.
+     * @since 1.0.0
+     * 
+     * @param array $args
+     */
+    private function output( $args )
+    {
+        $format = $this->input( 'output', 'json' );
+        switch ( $format ) {
+            case 'json':
+                $this->echo_json( $args );
+                die;
+                break;
+            case 'html':
+            default:
+                $this->echo_html( $args );
+                break;
+        }
+    }
+    /**
+     * Prints error output.
+     * @since 1.0.0
+     * 
+     * @param array $args
+     */
+    private function error( $args )
+    {
+        $format = $this->input( 'output', 'json' );
+        switch ( $format ) {
+            case 'json':
+                $this->echo_json( $args );
+                break;
+            case 'html':
+            default:
+                $this->echo_html( $args );
+                break;
+        }
+    }
+    /**
+     * Echos / prints arguments in JSON format.
+     * @since 1.0.0
+     * 
+     * @param array $args
+     */
+    private function echo_json( $args )
+    {
+        header( 'Content-Type: application/json' );
+        echo json_encode( $args );
+    }
+    /**
+     * Echos / prints arguments in HTML format.
+     * @since 1.0.0
+     * 
+     * @param array $args
+     */
+    private function echo_html( $args )
+    {
+        ob_start();
+        ?>
+        <!DOCTYPE html>
+        <html>
+            <head>
+                <title>Maintenance Webhook</title>
+            </head>
+            <body>
+                <table>
+                    <tbody>
+                        <?php foreach ( $args as $key => $value ) : ?>
+                            <tr>
+                                <th><?php echo ucfirst( $key ) ?></th>
+                                <td><?php echo ! is_bool( $value ) ? $value : ( $value ? 'true' : 'false' ) ?></td>
+                            </tr>
+                        <?php endforeach ?>
+                    </tbody>
+                </table>
+            </body>
+        </html>
+        <?php
+        echo ob_get_clean();
     }
 }
 
